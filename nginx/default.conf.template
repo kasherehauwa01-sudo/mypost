@@ -1,0 +1,9 @@
+server {
+  listen 80;
+  client_max_body_size 50m;
+  location = /health { access_log off; return 200 'ok'; add_header Content-Type text/plain; }
+  location ${BASE_PATH}/api/ { proxy_pass http://backend:8000/api/; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+  location ${BASE_PATH}/ { proxy_pass http://frontend:80/; proxy_set_header Host $host; }
+  location = ${BASE_PATH} { return 301 ${BASE_PATH}/; }
+}
+
