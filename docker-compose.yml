@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mypost}
+      POSTGRES_USER: ${POSTGRES_USER:-mypost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ${POSTGRES_USER:-mypost} -d ${POSTGRES_DB:-mypost}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mypost}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-mypost}
+      SECRET_KEY: ${SECRET_KEY:-development-only-secret-change-me}
+      BASE_PATH: ${BASE_PATH:-/mail}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-120}
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:8000/health]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  frontend:
+    build:
+      context: ./frontend
+      args: {VITE_BASE_PATH: "${BASE_PATH:-/mail}"}
+    healthcheck:
+      test: [CMD, wget, -qO-, http://localhost:80/]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  nginx:
+    image: nginx:1.27-alpine
+    environment: {BASE_PATH: "${BASE_PATH:-/mail}"}
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports: ["8080:80"]
+    depends_on:
+      backend: {condition: service_healthy}
+      frontend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -qO-, http://localhost/health]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+volumes: {postgres_data: {}}
+
