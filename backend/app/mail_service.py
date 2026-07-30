@@ -11,6 +11,10 @@ from app.repositories import write_log
 from app.security import decrypt
 
 def _text(value): return str(make_header(decode_header(value or "")))
+def _message_bytes(lines) -> bytes | None:
+    """Возвращает MIME-тело из FETCH-ответа, не полагаясь на первый заголовок письма."""
+    candidates = [line for line in lines if isinstance(line, bytes) and (b"\r\n" in line or b"\n" in line)]
+    return max(candidates, key=len) if candidates else None
 def _parse(raw: bytes, account_id: int, folder: str, uid: int) -> Message:
     msg = email.message_from_bytes(raw)
     item = Message(account_id=account_id, folder=folder, uid=uid, message_id=msg.get("Message-ID"), subject=_text(msg.get("Subject")) or "(без темы)", sender=_text(msg.get("From")), recipients=_text(msg.get("To")), cc=_text(msg.get("Cc")), bcc=_text(msg.get("Bcc")), size=len(raw), is_read=False)
@@ -51,7 +55,7 @@ class MailService:
             search = await client.uid("search", "ALL"); uids = search.lines[0].decode().split()[-250:]
             for uid_text in uids:
                 response = await client.uid("fetch", uid_text, "(RFC822)")
-                raw = next((line for line in response.lines if isinstance(line, bytes) and line.startswith(b"From:")), None)
+                raw = _message_bytes(response.lines)
                 if not raw: continue
                 db.add(_parse(raw, account.id, "INBOX", int(uid_text)))
                 try: await db.commit(); count += 1
@@ -59,4 +63,3 @@ class MailService:
             await client.logout(); await write_log(db, "sync", f"{account.email}: новых писем {count}")
         except Exception as exc: await db.rollback(); await write_log(db, "imap_error", f"{account.email}: {exc}", "error")
         return count
-
