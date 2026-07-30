@@ -1,0 +1,31 @@
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  client_max_body_size 50m;
+
+  # Docker embedded DNS позволяет разрешать backend во время запроса, а не при старте nginx.
+  resolver 127.0.0.11 valid=30s ipv6=off;
+  set $backend_upstream http://backend:8000;
+
+  location = /health {
+    access_log off;
+    add_header Content-Type text/plain;
+    return 200 'ok';
+  }
+
+  location ${BASE_PATH}/api/ {
+    rewrite ^${BASE_PATH}/api/(.*)$ /api/$1 break;
+    proxy_pass $backend_upstream;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ${BASE_PATH}/ {
+    rewrite ^${BASE_PATH}/(.*)$ /$1 break;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location = ${BASE_PATH} {
+    return 301 ${BASE_PATH}/;
+  }
+}
