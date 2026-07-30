@@ -7,7 +7,7 @@ from app.db import get_db
 from app.mail_service import MailService
 from app.models import Account, ActionLog, Attachment, Message
 from app.repositories import AccountRepository, MessageRepository, write_log
-from app.schemas import AccountIn, AccountOut, BulkAction, MessageOut, SendMail
+from app.schemas import AccountIn, AccountOut, AccountUpdate, BulkAction, MessageOut, SendMail
 from app.security import encrypt
 
 router = APIRouter(); mail = MailService()
@@ -17,8 +17,19 @@ async def accounts(db: AsyncSession = Depends(get_db)): return await AccountRepo
 async def add_account(data: AccountIn, db: AsyncSession = Depends(get_db)):
     values = data.model_dump(exclude={"password", "smtp_password"}); values.update(password_encrypted=encrypt(data.password), smtp_password_encrypted=encrypt(data.smtp_password))
     return await AccountRepository(db).add(Account(**values))
+@router.put("/accounts/{account_id}", response_model=AccountOut)
+async def update_account(account_id: int, data: AccountUpdate, db: AsyncSession = Depends(get_db)):
+    repository = AccountRepository(db); account = await repository.get(account_id)
+    if not account: raise HTTPException(404, "Аккаунт не найден")
+    values = data.model_dump(exclude={"password", "smtp_password"})
+    if data.password: values["password_encrypted"] = encrypt(data.password)
+    if data.smtp_password: values["smtp_password_encrypted"] = encrypt(data.smtp_password)
+    return await repository.update(account, values)
 @router.delete("/accounts/{account_id}", status_code=204)
-async def remove_account(account_id: int, db: AsyncSession = Depends(get_db)): await AccountRepository(db).delete(account_id)
+async def remove_account(account_id: int, db: AsyncSession = Depends(get_db)):
+    repository = AccountRepository(db)
+    if not await repository.get(account_id): raise HTTPException(404, "Аккаунт не найден")
+    await repository.delete(account_id)
 @router.post("/accounts/{account_id}/check")
 async def check(account_id: int, db: AsyncSession = Depends(get_db)):
     account = await AccountRepository(db).get(account_id)

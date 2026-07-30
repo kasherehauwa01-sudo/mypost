@@ -8,6 +8,9 @@ class AccountRepository:
     async def list(self): return list((await self.db.scalars(select(Account).order_by(Account.name))).all())
     async def get(self, account_id: int): return await self.db.get(Account, account_id)
     async def add(self, account: Account): self.db.add(account); await self.db.commit(); await self.db.refresh(account); return account
+    async def update(self, account: Account, values: dict):
+        for field, value in values.items(): setattr(account, field, value)
+        await self.db.commit(); await self.db.refresh(account); return account
     async def delete(self, account_id: int): await self.db.execute(delete(Account).where(Account.id == account_id)); await self.db.commit()
 
 class MessageRepository:
