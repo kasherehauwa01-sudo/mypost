@@ -44,6 +44,9 @@ async def sync(account_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/messages", response_model=list[MessageOut])
 async def messages(folder: str | None = None, q: str | None = None, sender: str | None = None, unread: bool | None = None, important: bool | None = None, has_attachment: bool | None = None, min_size: int | None = None, max_size: int | None = None, limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
     return await MessageRepository(db).list(folder, q, sender, unread, important, has_attachment, min_size, max_size, min(limit, 250), offset)
+@router.get("/folders", response_model=list[str])
+async def folders(db: AsyncSession = Depends(get_db)):
+    return list((await db.scalars(select(Message.folder).distinct().order_by(Message.folder))).all())
 @router.get("/messages/{message_id}", response_model=MessageOut)
 async def message(message_id: int, db: AsyncSession = Depends(get_db)):
     item = await MessageRepository(db).get(message_id)
