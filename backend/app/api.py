@@ -1,9 +1,9 @@
 import json
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.mail_service import MailService
 from app.models import Account, ActionLog, Attachment, Message
 from app.repositories import AccountRepository, MessageRepository, write_log
@@ -11,6 +11,11 @@ from app.schemas import AccountIn, AccountOut, AccountUpdate, BulkAction, Messag
 from app.security import encrypt
 
 router = APIRouter(); mail = MailService()
+async def sync_account_in_background(account_id: int) -> None:
+    """Запускает долгую IMAP-синхронизацию вне HTTP-запроса."""
+    async with SessionLocal() as db:
+        account = await AccountRepository(db).get(account_id)
+        if account: await mail.sync(db, account)
 @router.get("/accounts", response_model=list[AccountOut])
 async def accounts(db: AsyncSession = Depends(get_db)): return await AccountRepository(db).list()
 @router.post("/accounts", response_model=AccountOut, status_code=201)
@@ -35,11 +40,12 @@ async def check(account_id: int, db: AsyncSession = Depends(get_db)):
     account = await AccountRepository(db).get(account_id)
     if not account: raise HTTPException(404, "Аккаунт не найден")
     result = await mail.check(account); await write_log(db, "connection_check", json.dumps(result, ensure_ascii=False)); return result
-@router.post("/accounts/{account_id}/sync")
-async def sync(account_id: int, db: AsyncSession = Depends(get_db)):
+@router.post("/accounts/{account_id}/sync", status_code=202)
+async def sync(account_id: int, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     account = await AccountRepository(db).get(account_id)
     if not account: raise HTTPException(404, "Аккаунт не найден")
-    return {"new_messages": await mail.sync(db, account)}
+    background_tasks.add_task(sync_account_in_background, account_id)
+    return {"status": "queued"}
 
 @router.get("/messages", response_model=list[MessageOut])
 async def messages(folder: str | None = None, q: str | None = None, sender: str | None = None, unread: bool | None = None, important: bool | None = None, has_attachment: bool | None = None, min_size: int | None = None, max_size: int | None = None, limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
