@@ -15,8 +15,9 @@
 
 - **db** — PostgreSQL 17 с постоянным volume и healthcheck.
 - **backend** — Python 3.13, FastAPI, SQLAlchemy Async, Alembic, aioimaplib, aiosmtplib и APScheduler.
-- **frontend** — React 19, TypeScript, Vite и Material UI; nginx обслуживает SPA.
-- **nginx** — единая точка входа, маршрутизирует `${BASE_PATH}/api/` и SPA.
+- **frontend** — React 19, TypeScript, Vite и Material UI; встроенный nginx обслуживает SPA и маршрутизирует `${BASE_PATH}/api/` в backend.
+
+Отдельный контейнер reverse proxy не используется: nginx из frontend-контейнера уже является единой точкой входа на порту `8080`. На VPS внешний системный nginx может проксировать HTTPS-трафик на этот порт. Внутренний nginx использует Docker DNS `127.0.0.11` и разрешает имя `backend` во время запроса, поэтому перезапуск backend не требует перезапуска frontend.
 
 API доступен внутри proxy по `${BASE_PATH}/api`; OpenAPI backend — `/docs` при прямом доступе к контейнеру. Ограничение загрузки — 50 МБ.
 
