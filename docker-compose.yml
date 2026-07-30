@@ -30,10 +30,11 @@ services:
       context: ./frontend
       args: {VITE_BASE_PATH: "${BASE_PATH:-/mail}"}
     healthcheck:
-      test: [CMD, wget, -qO-, http://localhost:80/]
+      test: [CMD, wget, -qO-, http://127.0.0.1:80/]
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 10s
   nginx:
     image: nginx:1.27-alpine
     environment: {BASE_PATH: "${BASE_PATH:-/mail}"}
@@ -49,4 +50,3 @@ services:
       timeout: 5s
       retries: 5
 volumes: {postgres_data: {}}
-
